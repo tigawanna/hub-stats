@@ -28,12 +28,12 @@ to quickly create a Cobra application.`,
 		// fmt.Println("Hello World!")
 		cmd.Printf("args: %v\n", args)
 		if len(args) == 0 {
-			fmt.Println(Red+"username is required"+Reset)
+			fmt.Println(Red + "username is required" + Reset)
 			os.Exit(1)
 		}
 		username := args[0]
 		if username == "" {
-			fmt.Println(Red+"username is required"+Reset)
+			fmt.Println(Red + "username is required" + Reset)
 			os.Exit(1)
 		}
 		listAllUserRepos(username)
@@ -50,19 +50,20 @@ func Execute() {
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
-
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.hub-stats.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
+var repositoryList GithubRepos
 func listAllUserRepos(username string) {
-	reposUrl := fmt.Sprintf("https://api.github.com/users/%s/repos", username)
+	page := 1
+	for repositoryList == nil || len(repositoryList) % 100 == 0 && page < 10 {
+		fmt.Println(" ============= page ========== ", page)
+		listUserRepos(username, page)
+		page++
+	}
+}
+func listUserRepos(username string, page int) {
+	reposUrl := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d", username, page)
 	fmt.Println(Cyan+"==== fetching from =====", reposUrl, "===="+Reset)
 
 	resp, err := http.Get(reposUrl)
@@ -70,8 +71,6 @@ func listAllUserRepos(username string) {
 		panic(err)
 	}
 	defer resp.Body.Close()
-
-	// fmt.Println("StatusCode:", resp.StatusCode)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -81,13 +80,13 @@ func listAllUserRepos(username string) {
 	switch resp.StatusCode {
 	case 200:
 		fmt.Println(Green + "==== success =====" + Reset)
-		var response GithubRepos
-		err = json.Unmarshal(body, &response)
+
+		err = json.Unmarshal(body, &repositoryList)
 		if err != nil {
 			panic(err)
 		}
-		for _, repo := range response {
-			fmt.Println(repo.Name)
+		for idx, repo := range repositoryList {
+			fmt.Println(idx, "=========", repo.Name)
 		}
 
 	case 404:
@@ -97,7 +96,7 @@ func listAllUserRepos(username string) {
 			panic(err)
 		}
 		fmt.Println(response.Message)
-		fmt.Println("Learn more about this error :", response.DocumentationURL)
+		fmt.Println(Red+"Learn more about this error :", response.DocumentationURL, Reset)
 
 	default:
 		fmt.Println("StatusCode:", resp.StatusCode)

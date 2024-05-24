@@ -5,11 +5,14 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/spf13/cobra"
 	"io"
+	"log"
 	"net/http"
 	"os"
+
+	"github.com/spf13/cobra"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -36,7 +39,7 @@ to quickly create a Cobra application.`,
 			fmt.Println(Red + "username is required" + Reset)
 			os.Exit(1)
 		}
-		listAllUserRepos(username)
+		listAllUserRepos(username, 1)
 	},
 }
 
@@ -53,16 +56,24 @@ func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }
 
-var repositoryList GithubRepos
-func listAllUserRepos(username string) {
-	page := 1
-	for repositoryList == nil || len(repositoryList) % 100 == 0 && page < 10 {
-		fmt.Println(" ============= page ========== ", page)
-		listUserRepos(username, page)
-		page++
+var totalRepositoryList GithubRepos
+
+func listAllUserRepos(username string, page int) {
+	fmt.Println(Cyan+"==== fetching page =====", page, "===="+Reset)
+	fmt.Println(Cyan+"==== total fetched =====", len(totalRepositoryList), "===="+Reset)
+	if totalRepositoryList == nil || len(totalRepositoryList)%100 == 0 && page < 10 {
+		repositoryList, err := listUserRepos(username, page)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			totalRepositoryList = append(totalRepositoryList, repositoryList...)
+		}
+		listAllUserRepos(username, page+1)
 	}
+
 }
-func listUserRepos(username string, page int) {
+func listUserRepos(username string, page int) (GithubRepos, error) {
+	var repositoryList GithubRepos
 	reposUrl := fmt.Sprintf("https://api.github.com/users/%s/repos?per_page=100&page=%d", username, page)
 	fmt.Println(Cyan+"==== fetching from =====", reposUrl, "===="+Reset)
 
@@ -85,9 +96,8 @@ func listUserRepos(username string, page int) {
 		if err != nil {
 			panic(err)
 		}
-		for idx, repo := range repositoryList {
-			fmt.Println(idx, "=========", repo.Name)
-		}
+
+		return repositoryList, nil
 
 	case 404:
 		var response GithubResponseError
@@ -95,12 +105,15 @@ func listUserRepos(username string, page int) {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println(response.Message)
-		fmt.Println(Red+"Learn more about this error :", response.DocumentationURL, Reset)
-
+		errMessage := fmt.Sprintf("%s Learn more about this error : %s StatusCode: %d", response.Message, response.DocumentationURL, resp.StatusCode)
+		log.Fatal(errMessage)
+		return nil, errors.New(errMessage)
 	default:
-		fmt.Println("StatusCode:", resp.StatusCode)
+
 		fmt.Println("body:", string(body))
+		errMessage := fmt.Sprintf("Something went wrong : %s StatusCode: %d", string(body), resp.StatusCode)
+		log.Fatal(errMessage)
+		return nil, errors.New(errMessage)
 
 	}
 }
